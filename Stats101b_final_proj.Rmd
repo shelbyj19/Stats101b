@@ -156,4 +156,46 @@ p_delta <- ggplot(dat_delta, aes(Substance, Delta, fill = Substance)) +
 ggsave("fig5_delta.png", p_delta, width = 6, height = 5, dpi = 300)
 p_delta
 
+
+```
+
+## Box Plots
+```{r box_filtered, message=FALSE, warning=FALSE, fig.width=7, fig.height=5}
+library(tidyverse)
+
+# Load and clean
+df <- read.csv("C:/Users/shelb/Downloads/Stats 101b data collection - Sheet1.csv") %>%
+  mutate(
+    # trim spaces and fix common typos
+    Substance = trimws(Substance),
+    Substance = recode(Substance,
+                       "Coffee" = "Caffeinated"
+                       ),
+    delta = STA - STB,
+    Substance = factor(Substance, levels = c("Decaf","Caffeinated"))
+  )
+
+# Outlier cutoff (IQR rule)
+Q1 <- quantile(df$delta, 0.25, na.rm = TRUE)
+Q3 <- quantile(df$delta, 0.75, na.rm = TRUE)
+IQR <- Q3 - Q1
+lower <- Q1 - 1.5*IQR
+upper <- Q3 + 1.5*IQR
+
+# Filter outliers
+df_clean <- df %>% filter(delta >= lower, delta <= upper)
+
+# Boxplot
+ggplot(df_clean, aes(x = Substance, y = delta, fill = Substance)) +
+  geom_boxplot(alpha = 0.8) +
+  geom_jitter(width = 0.15, alpha = 0.4, size = 1) +
+  labs(
+    title = "Change in Stroop Interference (After - Before, outliers removed)",
+    x = "Condition",
+    y = "Delta Reaction Time (ms)"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+
 ```
