@@ -1,0 +1,159 @@
+---
+title: "Stats 101b"
+author: "Shelby Jackson"
+date: "2025-09-18"
+output: pdf_document
+---
+## Libraries
+```{r lib}
+library(tidyverse)
+library(afex)
+library(emmeans)
+library(ggplot2)
+library(ggdist)
+library(patchwork)
+```
+
+## Loading our data
+```{r data}
+coffee <- read.csv("C:/Users/shelb/Downloads/Stats 101b data collection - Sheet1.csv")
+
+```
+
+## ANOVA Analysis
+```{r a}
+coffee <- coffee %>%
+  mutate(delta = STA - STB)
+
+anova_delta <- aov(delta ~ Substance, data = coffee)
+summary(anova_delta)
+
+```
+
+## Residual Diagnositics
+```{r res}
+anova_delta <- aov(delta ~ Substance, data = coffee)
+summary(anova_delta)
+
+par(mfrow=c(2,2))  
+plot(anova_delta)
+```
+
+## Interaction Plots
+```{r inter}
+coffee <- read.csv("C:/Users/shelb/Downloads/Stats 101b data collection - Sheet1.csv")
+
+coffee_analysis <- coffee %>% 
+  mutate(id = row_number(),
+         Substance = factor(Substance, levels = c("Decaf","Coffee"))) %>%
+  pivot_longer(c(STB, STA), names_to = "Time", values_to = "RT") %>%
+  mutate(Time = factor(Time, levels = c("STB","STA"),
+                       labels = c("Before","After")))
+
+fit_aov <- aov_car(RT ~ Substance*Time + Error(id/Time), 
+                   data = coffee_analysis, factorize = FALSE)
+
+summary(fit_aov)
+
+```
+
+```{r 1}
+emmeans(fit_aov, ~ Substance*Time) %>% pairs(by = "Time")
+emmeans(fit_aov, ~ Time | Substance) %>% pairs()
+
+```
+
+```{r 2}
+
+afex_options(type = 3)
+fit_aov <- aov_car(RT ~ Substance*Time + Error(id/Time), 
+                   data = coffee_analysis, factorize = FALSE)
+
+emm <- emmeans(fit_aov, ~ Substance * Time)
+emm_df <- as.data.frame(emm)
+
+p_emm <- ggplot(emm_df,
+                aes(x = Time, y = emmean, color = Substance, group = Substance)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL), width = 0.08) +
+  labs(y = "Estimated marginal mean RT (ms)",
+       title = "Interaction plot from mixed ANOVA",
+       subtitle = "95% CIs from emmeans") +
+  theme_minimal(base_size = 12)
+
+print(p_emm)
+
+```
+
+```{r 3}
+coffee_long <- coffee %>%
+  mutate(id = row_number(),
+         Substance = factor(Substance, levels = c("Decaf","Coffee"))) %>%
+  pivot_longer(c(STB, STA), names_to = "Time", values_to = "RT") %>%
+  mutate(Time = factor(Time, levels = c("STB","STA"),
+                       labels = c("Before","After")))
+
+stopifnot(all(c("id","RT","Time","Substance") %in% names(coffee_long)))
+
+afex_options(type = 3)
+fit_ez <- aov_ez(id = "id",
+                 dv = "RT",
+                 data = coffee_long,
+                 between= "Substance",
+                 within = "Time")
+
+p_interact <- afex::afex_plot(
+  object = fit_ez,
+  x = "Time",
+  trace = "Substance",
+  error = "within"
+) +
+  labs(y = "Reaction time (ms)",
+       title = "Stroop RT: Before vs After by Beverage",
+       subtitle = "Within-subject 95% CIs")
+
+print(p_interact)
+
+```
+
+```{r 4}
+sumdat <- coffee_analysis %>%
+  group_by(Substance, Time) %>%
+  summarise(mean = mean(RT), se = sd(RT)/sqrt(n()), .groups = "drop")
+
+p_spaghetti <- ggplot(coffee_analysis, aes(Time, RT, group = id)) +
+  geom_line(aes(color = Substance), alpha = 0.15) +
+  stat_summary(aes(color = Substance, group = Substance),
+               fun = mean, geom = "line", linewidth = 1.2) +
+  stat_summary(aes(color = Substance, group = Substance),
+               fun = mean, geom = "point", size = 3) +
+  labs(y = "Reaction time (ms)",
+       title = "Individual change (thin) + group mean (bold)") +
+  theme_minimal(base_size = 12)
+
+ggsave("fig3_spaghetti.png", p_spaghetti, width = 7, height = 5, dpi = 300)
+p_spaghetti
+
+```
+
+```{r 5}
+dat_delta <- coffee %>%
+  mutate(id = row_number(),
+         Substance = factor(Substance, levels = c("Decaf","Coffee")),
+         Delta = STA - STB)
+
+p_delta <- ggplot(dat_delta, aes(Substance, Delta, fill = Substance)) +
+  ggdist::stat_slab(alpha = .25) +
+  geom_boxplot(width = .25, outlier.shape = NA, alpha = .4) +
+  geom_jitter(width = .08, alpha = .4, size = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(y = expression(Delta~"(ms) = After - Before"),
+       title = "Change scores by Beverage (negative = improved)") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+ggsave("fig5_delta.png", p_delta, width = 6, height = 5, dpi = 300)
+p_delta
+
+```
